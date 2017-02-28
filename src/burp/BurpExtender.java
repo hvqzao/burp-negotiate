@@ -1,7 +1,7 @@
 package burp;
 
-import hvqzao.negotiate.Negotiate;
+import hvqzao.negotiate.NegotiateExtension;
 
-public class BurpExtender extends Negotiate {
-    // see hvqzao.negotiate.Negotiate
+public class BurpExtender extends NegotiateExtension {
+    // see hvqzao.negotiate.NegotiateExtension
 }

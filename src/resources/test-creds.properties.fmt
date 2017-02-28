@@ -1,5 +1,5 @@
-targetURL=
+target_url=
 domain=
-kdc=
 username=
 password=
+debug=false
