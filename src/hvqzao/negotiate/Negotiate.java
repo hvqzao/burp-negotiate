@@ -15,10 +15,12 @@
 package hvqzao.negotiate;
 
 import burp.BurpExtender;
+import burp.IBurpExtenderCallbacks;
 import burp.IExtensionHelpers;
 import burp.IHttpListener;
 import burp.IHttpRequestResponse;
 import burp.IRequestInfo;
+import burp.IResponseInfo;
 import com.sun.security.jgss.ExtendedGSSContext;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -36,7 +38,9 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Hashtable;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Scanner;
 import javax.crypto.Cipher;
 import javax.naming.NamingException;
@@ -80,6 +84,7 @@ public class Negotiate implements IHttpListener {
     private final HashMap<String, String> domainSpn;
     private final String lineSeparator;
     private final ArrayList<URL> scope;
+    private boolean enabled;
 
     /**
      * Instantiate Negotiate object and initialize it with parameters.
@@ -132,6 +137,22 @@ public class Negotiate implements IHttpListener {
         this(domain, username, password, true, false, false);
     }
 
+    /**
+     * Unlimited Strength Java(TM) Cryptography Extension Policy Files check.
+     *
+     * "Due to export control restrictions, JDK 5.0 environments do not ship
+     * with support for AES-256 enabled. Kerberos uses AES-256 in the
+     * 'aes256-cts-hmac-sha1-96' encryption type. To enable AES-256, you
+     * must download "unlimited strength" policy JAR files for your JRE.
+     * Policy JAR files are signed by the JRE vendor so you must download
+     * policy JAR files for Sun, IBM, etc. separately. Also, policy files
+     * may be different for each platform, such as i386, Solaris, or HP."
+     * 
+     * Source:
+     * https://cwiki.apache.org/confluence/display/DIRxSRVx10/Kerberos+and+Unlimited+Strength+Policy
+     * 
+     * @return status
+     */
     public static boolean isUnlimitedJCE() {
         boolean unlimited = false;
         try {
@@ -144,12 +165,12 @@ public class Negotiate implements IHttpListener {
 
     private void log(String... text) {
         if (verbose) {
-            stdout.print(String.join(" ", text).concat(lineSeparator));
+            stdout.println(String.join(" ", text));
         }
     }
 
     private void error(String... text) {
-        stderr.print(String.join(" ", text).concat(lineSeparator));
+        stderr.println(String.join(" ", text));
     }
 
     private abstract static class DNS {
@@ -186,6 +207,11 @@ public class Negotiate implements IHttpListener {
         }
     }
 
+    /**
+     * Log in.
+     *
+     * @return success
+     */
     public boolean login() {
         //
         // obtain list of kdc's
@@ -194,7 +220,7 @@ public class Negotiate implements IHttpListener {
         // "_ldap._tcp.dc._msdcs.[...]"
         // "_kerberos._tcp.dc._msdcs.[...]"
         ArrayList<String> kdcs = DNS.query(DNS.TYPE_SRV, new StringBuilder("_kerberos._tcp.dc._msdcs.").append(domain.toLowerCase()).toString());
-        log(String.format("[+] kdc found (%s)", String.valueOf(kdcs.size())));
+        log(String.format("[+] kdc found (%d)", kdcs.size()));
         //kdcs.forEach((String k) -> {
         //    log("    " + k);
         //});
@@ -239,7 +265,7 @@ public class Negotiate implements IHttpListener {
         log(String.format("    username:     %s", username));
         log(String.format("    password:     %s", "*********"));
         log(String.format("    principal:    %s", principal));
-        log(String.format("    forwardable:  %s", String.valueOf(forwardable)));
+        log(String.format("    forwardable:  %b", forwardable));
 
         //
         // build krb5 config
@@ -353,11 +379,15 @@ public class Negotiate implements IHttpListener {
             }
             return false;
         });
-        log(String.format("[+] forwardable: %s", String.valueOf(forwardableStatus)));
+        log(String.format("[+] forwardable: %b", forwardableStatus));
 
         return true;
     }
 
+    /**
+     * Log out.
+     *
+     */
     public void logout() {
         // 
         // logout and clear login context
@@ -372,6 +402,15 @@ public class Negotiate implements IHttpListener {
                 loginContext = null;
             }
         }
+    }
+
+    /**
+     * Is logged in?
+     *
+     * @return status
+     */
+    public boolean isLoggedIn() {
+        return loginContext != null;
     }
 
     private class KerberosCallBackHandler implements CallbackHandler {
@@ -456,24 +495,46 @@ public class Negotiate implements IHttpListener {
     private class ServiceTicket {
 
         private final GSSContext context;
-        private final String ticket;
+        private final String cachedToken;
 
-        public ServiceTicket(GSSContext context, String ticket) {
+        public ServiceTicket(GSSContext context, String token) {
             this.context = context;
-            this.ticket = ticket;
+            this.cachedToken = token;
         }
 
         public GSSContext getContext() {
             return context;
         }
 
-        public String getTicket() {
-            return ticket;
+        public String getCachedToken() {
+            return cachedToken;
         }
     }
 
-    public String getTicket(URL targetURL) {
-        String targetHost = targetURL.getHost().toLowerCase();
+    private String getHost(URL url) {
+        return url.getHost().toLowerCase();
+    }
+
+    private ServiceTicket getServiceTicket(String targetHost) {
+        ServiceTicket serviceTicket = null;
+        if (domainSpn.containsKey(targetHost)) {
+            String spn = domainSpn.get(targetHost);
+            if (spnServiceTicket.containsKey(spn)) {
+                serviceTicket = spnServiceTicket.get(spn);
+            }
+        }
+        return serviceTicket;
+    }
+
+    /**
+     * Get token.
+     *
+     * @param targetURL
+     * @param cached
+     * @return
+     */
+    public String getToken(URL targetURL, boolean cached) {
+        String targetHost = getHost(targetURL);
 
         //
         // print config
@@ -481,6 +542,20 @@ public class Negotiate implements IHttpListener {
         log("[+] ticket config");
         log(String.format("    target url:   %s", targetURL.toString()));
         log(String.format("    target host:  %s", targetHost));
+
+        ServiceTicket serviceTicket;
+
+        //
+        // get cached token
+        //
+        if (cached) {
+            serviceTicket = getServiceTicket(targetHost);
+            if (serviceTicket != null) {
+                log("[+] cache hit");
+                return serviceTicket.getCachedToken();
+            }
+            log("[+] cache miss");
+        }
 
         //
         // spns for hostname
@@ -501,7 +576,7 @@ public class Negotiate implements IHttpListener {
                 return null;
             }
         }
-        // store result
+        // store result in cache
         spns.forEach((String key, ServiceTicket value) -> {
             if (spnServiceTicket.containsKey(key) == false) {
                 spnServiceTicket.put(key, value);
@@ -510,22 +585,33 @@ public class Negotiate implements IHttpListener {
                 domainSpn.put(targetHost, key);
             }
         });
-        // obtain spn and ticket
-        String spn = null;
-        ServiceTicket serviceTicket = null;
-        if (domainSpn.containsKey(targetHost)) {
-            spn = domainSpn.get(targetHost);
-            if (spnServiceTicket.containsKey(spn)) {
-                serviceTicket = spnServiceTicket.get(spn);
-            }
-        }
-        if (spn == null || serviceTicket == null) {
+        // obtain service ticket and its token from cache
+        serviceTicket = getServiceTicket(targetHost);
+        if (serviceTicket == null) {
             log("[ ] serviceTicket missing!");
             return null;
         }
-        String ticket = serviceTicket.getTicket();
-        log(String.format("[+] new ticket: %s...%s (%s)", ticket.substring(0, 20), ticket.substring(ticket.length() - 20, ticket.length()), String.valueOf(ticket.length())));
-        return ticket;
+        String token = serviceTicket.getCachedToken();
+        log(String.format("[+] new token: %s[...] (%d)", token.substring(0, 10), token.length()));
+        return token;
+    }
+
+    /**
+     * Get token (preferably cached).
+     *
+     * @param targetURL
+     * @return
+     */
+    public String getToken(URL targetURL) {
+        return getToken(targetURL, true);
+    }
+
+    /**
+     * Clear Service Ticket cache.
+     *
+     */
+    public void clearCache() {
+        spnServiceTicket.clear();
     }
 
     /**
@@ -564,25 +650,125 @@ public class Negotiate implements IHttpListener {
         scope.clear();
     }
 
+    private boolean isUnauthenticated(IResponseInfo responseInfo) {
+        return responseInfo.getStatusCode() == 401 && responseInfo.getHeaders().stream().anyMatch((String header) -> {
+            return "www-authenticate: negotiate".equals(header.trim().toLowerCase());
+        });
+    }
+
+    private boolean isHttps(URL url) {
+        return url.toString().trim().toLowerCase().startsWith("https://");
+    }
+
+    private int getPort(URL url) {
+        int port = url.getPort();
+        if (port == -1) {
+            if (isHttps(url) == false) {
+                port = 80;
+            } else {
+                port = 443;
+            }
+        }
+        return port;
+    }
+
+    /**
+     * Is processing http messages enabled?
+     *
+     * @return status
+     */
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    /**
+     * Enable or disable processing http messages.
+     *
+     * @param enabled status
+     */
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    /**
+     * Get an exception from error token response.
+     *
+     * @param context
+     * @param returnedToken
+     */
+    private void processErrorTokenResponse(GSSContext context, String returnedToken) {
+        byte[] tokenBytes;
+        try {
+            tokenBytes = Base64.getDecoder().decode(returnedToken);
+        } catch (Exception ex) {
+            error("Failed to base64-decode Negotiate token from server");
+            return;
+        }
+        try {
+            context.initSecContext(tokenBytes, 0, tokenBytes.length);
+        } catch (GSSException ex) {
+            // this is an "expected" exception - we're deliberately feeding in
+            // an error token from the server to collect the corresponding
+            // exception
+            ex.printStackTrace(stderr);
+        }
+    }
+
     @Override
     public void processHttpMessage(int toolFlag, boolean messageIsRequest, IHttpRequestResponse messageInfo) {
-        IExtensionHelpers helpers = BurpExtender.getHelpers();
-        IRequestInfo requestInfo = helpers.analyzeRequest(messageInfo);
-        final URL url = requestInfo.getUrl();
-        // is current url in Negotiate scope?
-        if (scope.stream().anyMatch((URL scopeURL) -> {
-            if (url.getProtocol().equals(scopeURL.getProtocol()) == false) {
-                return false;
+        if (enabled && scope.size() > 0 && loginContext != null && messageIsRequest == false) {
+            try {
+                IExtensionHelpers helpers = BurpExtender.getHelpers();
+                IRequestInfo requestInfo = helpers.analyzeRequest(messageInfo);
+                final URL url = requestInfo.getUrl();
+                // is current url in Negotiate scope?
+                if (scope.stream().anyMatch((URL scopeURL) -> {
+                    if (url.getProtocol().equals(scopeURL.getProtocol()) == false) {
+                        return false;
+                    }
+                    if (url.getHost().equals(scopeURL.getHost()) == false) {
+                        return false;
+                    }
+                    if (getPort(url) != getPort(scopeURL)) {
+                        return false;
+                    }
+                    return url.getPath().startsWith(scopeURL.getPath());
+                })) {
+                    IBurpExtenderCallbacks callbacks = BurpExtender.getCallbacks();
+                    IResponseInfo responseInfo = helpers.analyzeResponse(messageInfo.getResponse());
+                    List<String> headers = requestInfo.getHeaders();
+                    if (isUnauthenticated(responseInfo)) {
+                        // attempt to use cached token first, otherwise try to get new one
+                        for (boolean cached : Arrays.asList(true, false)) {
+                            log(String.format("[+] getting authentication token, cached: %b", cached));
+                            String token = getToken(url, cached);
+                            headers.add(new StringBuilder("Authorization: Negotiate ").append(token).toString());
+                            byte[] authRequest = helpers.buildHttpMessage(headers, new byte[0]);
+                            IHttpRequestResponse authMessageInfo = callbacks.makeHttpRequest(messageInfo.getHttpService(), authRequest);
+                            byte[] authResponse = authMessageInfo.getResponse();
+                            IResponseInfo authResponseInfo = helpers.analyzeResponse(authResponse);
+                            messageInfo.setResponse(authResponse);
+                            if (isUnauthenticated(authResponseInfo) == false) {
+                                break;
+                            }
+                            // check if we received an error token response
+                            Optional<String> optionalHeader = authResponseInfo.getHeaders().stream().map((String header) -> {
+                                return header.trim().replaceAll("\\s+", " ");
+                            }).filter((String header) -> {
+                                return header.toLowerCase().startsWith("www-authenticate: negotiate ");
+                            }).findFirst();
+                            if (optionalHeader.isPresent()) {
+                                log("[+] got error token response!");
+                                String responseToken = Arrays.asList(optionalHeader.get().split("\\s", 3)).get(2);
+                                GSSContext context = getServiceTicket(getHost(url)).getContext();
+                                processErrorTokenResponse(context, responseToken);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace(stderr);
             }
-            if (url.getHost().equals(scopeURL.getHost()) == false) {
-                return false;
-            }
-            if ((url.getPort() == scopeURL.getPort()) == false) {
-                return false;
-            }
-            return url.getPath().startsWith(scopeURL.getPath());
-        })) {
-            
         }
     }
 }

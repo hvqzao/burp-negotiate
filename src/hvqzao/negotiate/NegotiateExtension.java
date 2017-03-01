@@ -11,7 +11,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 import java.util.Properties;
-//import javax.swing.SwingUtilities;
+import javax.swing.SwingUtilities;
 
 public class NegotiateExtension implements IBurpExtender {
 
@@ -28,14 +28,26 @@ public class NegotiateExtension implements IBurpExtender {
         stdout = new PrintWriter(callbacks.getStdout(), true);
         stderr = new PrintWriter(callbacks.getStderr(), true);
         callbacks.setExtensionName("Negotiate");
-        //SwingUtilities.invokeLater(() -> {
-        //
-        //});
-
-        test();
         
-        //setup();
+        // is unlimited JCE enabled?
+        boolean unlimitedJCE = Negotiate.isUnlimitedJCE();
+        stdout.println(String.format("    Unlimited Strength Java(TM) Cryptography Extension Policy Files %s", unlimitedJCE ? "detected" : "missing!"));
+        if (unlimitedJCE == false) {
+            stdout.println("[ ] Negotiate authentication might not work!");
+        }
 
+        // draw GUI
+        SwingUtilities.invokeLater(() -> {
+            //
+            // TODO
+            //
+        });
+
+        //
+        // tests
+        //
+        //testSingleRequest();
+        //testProxyRequests();
     }
 
     public static PrintWriter getStdout() {
@@ -54,7 +66,10 @@ public class NegotiateExtension implements IBurpExtender {
         return helpers;
     }
 
-    private void test() {
+    //
+    // test: single request
+    //
+    private void testSingleRequest() {
         stdout.println("[+] test started");
 
         //
@@ -97,25 +112,6 @@ public class NegotiateExtension implements IBurpExtender {
         }
 
         //
-        // unlimited JCE check
-        //
-        // "Due to export control restrictions, JDK 5.0 environments do not ship
-        // with support for AES-256 enabled. Kerberos uses AES-256 in the
-        // 'aes256-cts-hmac-sha1-96' encryption type. To enable AES-256, you
-        // must download "unlimited strength" policy JAR files for your JRE.
-        // Policy JAR files are signed by the JRE vendor so you must download
-        // policy JAR files for Sun, IBM, etc. separately. Also, policy files
-        // may be different for each platform, such as i386, Solaris, or HP."
-        // Source:
-        // https://cwiki.apache.org/confluence/display/DIRxSRVx10/Kerberos+and+Unlimited+Strength+Policy
-        //
-        boolean unlimitedJCE = Negotiate.isUnlimitedJCE();
-        stdout.println(String.format("    Unlimited Strength Java(TM) Cryptography Extension Policy Files %s", unlimitedJCE ? "detected" : "missing!"));
-        if (unlimitedJCE == false) {
-            stdout.println("[ ] Negotiate authentication might not work!");
-        }
-
-        //
         // login, get ticket and test Negotiate authentication
         //
         Negotiate negotiate = new Negotiate(domain, username, password, true, true, true);
@@ -125,9 +121,9 @@ public class NegotiateExtension implements IBurpExtender {
             stdout.println("[ ] login failed");
             return;
         }
-        String ticket = negotiate.getTicket(targetURL);
-        if (ticket == null) {
-            stdout.println("[ ] failed to obtain a ticket");
+        String token = negotiate.getToken(targetURL);
+        if (token == null) {
+            stdout.println("[ ] failed to obtain an authentication token");
         }
 
         //
@@ -139,9 +135,9 @@ public class NegotiateExtension implements IBurpExtender {
         stdout.println("[+] base response - status code: " + String.valueOf(baseResponseInfo.getStatusCode()));
         //
         // HTTP/1.1 401 Unauthorized
-        // www-authenticate: NegotiateExtension
+        // www-authenticate: Negotiate
         //
-        // Authorization: NegotiateExtension YII[...]
+        // Authorization: Negotiate YII[...]
         //
         // fiddler's ticket length: 4972
         // generated ticket length: 6320 (SPNEGO), 6256 (KRB_5)
@@ -151,7 +147,7 @@ public class NegotiateExtension implements IBurpExtender {
         //
         IRequestInfo baseRequestInfo = helpers.analyzeRequest(baseRequest);
         List<String> headers = baseRequestInfo.getHeaders();
-        headers.add("Authorization: Negotiate " + ticket);
+        headers.add("Authorization: Negotiate " + token);
         byte[] authRequest = helpers.buildHttpMessage(headers, new byte[0]);
         byte[] authResponse = callbacks.makeHttpRequest(host, port, https, authRequest);
         IResponseInfo authResponseInfo = helpers.analyzeResponse(authResponse);
@@ -161,7 +157,12 @@ public class NegotiateExtension implements IBurpExtender {
         stdout.println("[+] test completed");
     }
 
-    void setup() {
+    //
+    // test: proxy requests
+    //
+    void testProxyRequests() {
+        stdout.println("[+] starting proxy");
+
         //
         // get initial config
         //
@@ -191,24 +192,24 @@ public class NegotiateExtension implements IBurpExtender {
             return;
         }
 
-        //
-        // we don't use burp scope
-        //
-        //callbacks.includeInScope(scopeURL);
-
         Negotiate negotiate = new Negotiate(domain, username, password, true, true, true);
         if (negotiate.login() == false) {
             stdout.println("login failed!");
             return;
         }
+
+        //
+        // define scope, Sidenote: extension scope is independent from Burp's scope
+        //
         negotiate.scopeAdd(scopeURL);
+        stdout.println("[+] scope:");
+        stdout.println(String.format("    %s", scopeURL.toString()));
+
+        //
+        // register http listener
+        //
         callbacks.registerHttpListener(negotiate);
-        
-        //
-        // TODO
-        //
-        // [ ]    ProcessErrorTokenResponse
-        // [ ]    processHttpMessage
-        //
+
+        stdout.println("[+] proxy started");
     }
 }
