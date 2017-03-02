@@ -251,7 +251,7 @@ public class NegotiateExtension implements IBurpExtender, ITab {
         //
         // define scope, Sidenote: extension scope is independent from Burp's scope
         //
-        negotiate.scopeAdd(scopeURL);
+        negotiate.add(scopeURL);
         stdout.println("[+] scope:");
         stdout.println(String.format("    %s", scopeURL.toString()));
 

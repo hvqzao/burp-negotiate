@@ -282,18 +282,18 @@ public class Negotiate implements IHttpListener {
             ArrayList<String> lines = new ArrayList<>();
             lines.add(String.format("[libdefaults]"));
             lines.add(String.format("  forwardable=true"));
-            //lines.scopeAdd(String.format("  default_realm = %s", domain));
-            //lines.scopeAdd(String.format(""));
-            //lines.scopeAdd(String.format("[realms]"));
-            //lines.scopeAdd(String.format("  %s = {", domain));
-            //lines.scopeAdd(String.format("    kdc = %s", kdc));
-            //lines.scopeAdd(String.format("    admin_server = %s", kdc));
-            //lines.scopeAdd(String.format("    default_domain = %s", domain));
-            //lines.scopeAdd(String.format("  }"));
-            //lines.scopeAdd(String.format(""));
-            //lines.scopeAdd(String.format("[domain_realm]"));
-            //lines.scopeAdd(String.format("  .%s = %s", domain, realm));
-            //lines.scopeAdd(String.format("  %s = %s", domain, realm));
+            //lines.add(String.format("  default_realm = %s", domain));
+            //lines.add(String.format(""));
+            //lines.add(String.format("[realms]"));
+            //lines.add(String.format("  %s = {", domain));
+            //lines.add(String.format("    kdc = %s", kdc));
+            //lines.add(String.format("    admin_server = %s", kdc));
+            //lines.add(String.format("    default_domain = %s", domain));
+            //lines.add(String.format("  }"));
+            //lines.add(String.format(""));
+            //lines.add(String.format("[domain_realm]"));
+            //lines.add(String.format("  .%s = %s", domain, realm));
+            //lines.add(String.format("  %s = %s", domain, realm));
             lines.add("");
             String joined = lines.stream().reduce((String t, String u) -> {
                 return String.join("", t, lineSeparator, u);
@@ -638,7 +638,7 @@ public class Negotiate implements IHttpListener {
      *
      * @param scopeURL
      */
-    public void scopeAdd(URL scopeURL) {
+    public void add(URL scopeURL) {
         if (scope.contains(scopeURL) == false) {
             scope.add(scopeURL);
         }
@@ -651,7 +651,7 @@ public class Negotiate implements IHttpListener {
      *
      * @param scopeURL
      */
-    public void scopeRemove(URL scopeURL) {
+    public void remove(URL scopeURL) {
         if (scope.contains(scopeURL)) {
             scope.remove(scopeURL);
         }
@@ -663,7 +663,7 @@ public class Negotiate implements IHttpListener {
      * scope.
      *
      */
-    public void scopeClear() {
+    public void clear() {
         scope.clear();
     }
 

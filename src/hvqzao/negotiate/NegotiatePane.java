@@ -6,10 +6,13 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 import javax.swing.DefaultListModel;
 
 public class NegotiatePane extends javax.swing.JPanel {
 
+    private static final String PRESET_USERDOMAIN = "userDomain";
+    private static final String PRESET_SCOPE = "scope";
     private Negotiate negotiate;
     private IBurpExtenderCallbacks callbacks;
     private DefaultListModel scopeModel;
@@ -88,13 +91,9 @@ public class NegotiatePane extends javax.swing.JPanel {
     }
 
     private void setLoggedInState(boolean isLoggedIn) {
-        addButton.setEnabled(isLoggedIn);
-        removeButton.setEnabled(isLoggedIn);
-        clearButton.setEnabled(isLoggedIn);
         loginButton.setEnabled(isLoggedIn == false);
         logoutButton.setEnabled(isLoggedIn);
         clearCacheButton.setEnabled(isLoggedIn);
-        scopeList.setEnabled(isLoggedIn);
     }
 
     private void setDefaults() {
@@ -106,44 +105,103 @@ public class NegotiatePane extends javax.swing.JPanel {
         urlField.setText("");
         scopeList.removeAll();
         setLoggedInState(false);
+
+        loadSavedPresets();
+
+        // check unlimited JCE
         if (Negotiate.isUnlimitedJCE() == false) {
             setError("Unlimited Strength Java(TM) Cryptography Extension Policy Files not found! Extension might fail to work!");
         } else {
             clearError();
         }
+        
+        userDomainField.requestFocus();
     }
 
-    private void add() {
-        String textUrl = urlField.getText();
+    private void add(String textUrl, boolean verbose) {
         URL url = getURL(textUrl);
         if (url != null) {
-            negotiate.scopeAdd(url);
+            if (negotiate != null) {
+                negotiate.add(url);
+            }
             scopeModel.addElement(textUrl);
             urlField.setText("");
             clearError();
         } else {
-            setError("Failed to parse URL!");
+            if (verbose) {
+                setError("Failed to parse URL!");
+            }
         }
+    }
+
+    private void add() {
+        String textUrl = urlField.getText();
+        add(textUrl, true);
+
+        savePresets();
     }
 
     private void remove() {
         scopeList.getSelectedValuesList().forEach((String urlText) -> {
             URL url = getURL(urlText);
-            negotiate.scopeRemove(url);
+            if (negotiate != null) {
+                negotiate.remove(url);
+            }
             scopeModel.removeElement(urlText);
+            urlField.setText(urlText);
+            urlField.requestFocus();
         });
+
+        savePresets();
     }
 
     private void clear() {
-        negotiate.scopeClear();
+        if (negotiate != null) {
+            negotiate.clear();
+        }
         scopeModel.clear();
+
+        savePresets();
+    }
+
+    /**
+     * Save presets to Burp config.
+     *
+     */
+    private void savePresets() {
+        callbacks.saveExtensionSetting(PRESET_USERDOMAIN, userDomainField.getText());
+        callbacks.saveExtensionSetting(PRESET_SCOPE, String.join("|", getScope()));
+    }
+
+    /**
+     * Load presets from Burp config.
+     *
+     */
+    private void loadSavedPresets() {
+        String userDomainPreset = callbacks.loadExtensionSetting(PRESET_USERDOMAIN);
+        if (userDomainPreset != null) {
+            userDomainField.setText(userDomainPreset);
+        }
+        String scopeStringPreset = callbacks.loadExtensionSetting(PRESET_SCOPE);
+        if (scopeStringPreset != null) {
+            Arrays.asList(scopeStringPreset.split("\\|")).stream().forEach((String textUrl) -> {
+                add(textUrl, false);
+            });
+        }
+    }
+
+    private List<String> getScope() {
+        return Arrays.asList(scopeModel.toArray()).stream().map((Object urlObject) -> {
+            return (String) urlObject;
+        }).collect(Collectors.toList());
     }
 
     private void login() {
         String username;
         String domain;
         String password;
-        List<String> userDomain = Arrays.asList(userDomainField.getText().split("@", 2));
+        String userDomainText = userDomainField.getText();
+        List<String> userDomain = Arrays.asList(userDomainText.split("@", 2));
         if (userDomain.size() < 2) {
             setError("Invalid format of Username @ Domain field!");
             return;
@@ -156,6 +214,14 @@ public class NegotiatePane extends javax.swing.JPanel {
             setLoggedInState(true);
             callbacks.registerHttpListener(negotiate);
             clearError();
+
+            // add scope from list view to negotiate
+            getScope().forEach((String urlText) -> {
+                URL url = getURL(urlText);
+                negotiate.add(url);
+            });
+
+            savePresets();
         } else {
             setError("Login failed!");
             negotiate = null;
@@ -163,7 +229,7 @@ public class NegotiatePane extends javax.swing.JPanel {
     }
 
     private void logout() {
-        clear();
+        negotiate.clear();
         negotiate.logout();
         setLoggedInState(false);
     }
