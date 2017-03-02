@@ -5,21 +5,32 @@ import burp.IBurpExtenderCallbacks;
 import burp.IExtensionHelpers;
 import burp.IRequestInfo;
 import burp.IResponseInfo;
+import burp.ITab;
+import java.awt.Component;
+import java.awt.Dimension;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 import java.util.Properties;
+import javax.swing.ImageIcon;
+import javax.swing.JScrollPane;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingUtilities;
 
-public class NegotiateExtension implements IBurpExtender {
+public class NegotiateExtension implements IBurpExtender, ITab {
 
     private Properties properties;
     private static IBurpExtenderCallbacks callbacks;
     private static IExtensionHelpers helpers;
     private static PrintWriter stdout;
     private static PrintWriter stderr;
+    private static ImageIcon iconHelp;
+    private static ImageIcon iconDefaults;
+    private static Dimension iconDimension;
+    private JScrollPane optionsTab;
+    private NegotiatePane optionsPane;
 
     @Override
     public void registerExtenderCallbacks(IBurpExtenderCallbacks callbacks) {
@@ -28,23 +39,33 @@ public class NegotiateExtension implements IBurpExtender {
         stdout = new PrintWriter(callbacks.getStdout(), true);
         stderr = new PrintWriter(callbacks.getStderr(), true);
         callbacks.setExtensionName("Negotiate");
-        
-        // is unlimited JCE enabled?
-        boolean unlimitedJCE = Negotiate.isUnlimitedJCE();
-        stdout.println(String.format("    Unlimited Strength Java(TM) Cryptography Extension Policy Files %s", unlimitedJCE ? "detected" : "missing!"));
-        if (unlimitedJCE == false) {
-            stdout.println("[ ] Negotiate authentication might not work!");
-        }
 
         // draw GUI
         SwingUtilities.invokeLater(() -> {
-            //
-            // TODO
-            //
+            try {
+                // icons (Help, Defaults)
+                iconHelp = new ImageIcon(new ImageIcon(getClass().getResource("/hvqzao/negotiate/resources/panel_help.png")).getImage().getScaledInstance(13, 13, java.awt.Image.SCALE_SMOOTH));
+                iconDefaults = new ImageIcon(new ImageIcon(getClass().getResource("/hvqzao/negotiate/resources/panel_defaults.png")).getImage().getScaledInstance(13, 13, java.awt.Image.SCALE_SMOOTH));
+                iconDimension = new Dimension(24, 24);
+
+                // options pane
+                optionsPane = new NegotiatePane();
+
+                // options tab wrapper
+                optionsTab = new JScrollPane(optionsPane, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+                callbacks.customizeUiComponent(optionsTab);
+                optionsTab.setFocusable(false);
+
+                optionsPane.initialize();
+
+                callbacks.addSuiteTab(this);
+            } catch (Exception ex) {
+                ex.printStackTrace(stderr);
+            }
         });
 
         //
-        // tests
+        // available tests (configuration required - hvqzao/negotiate/resources/test-creds.properties):
         //
         //testSingleRequest();
         //testProxyRequests();
@@ -66,6 +87,37 @@ public class NegotiateExtension implements IBurpExtender {
         return helpers;
     }
 
+    public static ImageIcon getIconHelp() {
+        return iconHelp;
+    }
+
+    public static ImageIcon getIconDefaults() {
+        return iconDefaults;
+    }
+
+    public Dimension getIconDimension() {
+        return iconDimension;
+    }
+
+    private void checkUnlimitedJCE() {
+        // is unlimited JCE enabled?
+        boolean unlimitedJCE = Negotiate.isUnlimitedJCE();
+        stdout.println(String.format("    Unlimited Strength Java(TM) Cryptography Extension Policy Files %s", unlimitedJCE ? "detected" : "missing!"));
+        if (unlimitedJCE == false) {
+            stdout.println("[ ] Negotiate authentication might not work!");
+        }
+    }
+
+    private void setProperties() {
+        properties = new Properties();
+        try {
+            properties.load(NegotiateExtension.class.getResourceAsStream("/hvqzao/negotiate/resources/test-creds.properties"));
+        } catch (IOException ex) {
+            ex.printStackTrace(stderr);
+            //return;
+        }
+    }
+    
     //
     // test: single request
     //
@@ -73,15 +125,14 @@ public class NegotiateExtension implements IBurpExtender {
         stdout.println("[+] test started");
 
         //
+        // check unlimited JCE
+        //
+        checkUnlimitedJCE();
+
+        //
         // get initial config
         //
-        properties = new Properties();
-        try {
-            properties.load(NegotiateExtension.class.getResourceAsStream("/resources/test-creds.properties"));
-        } catch (IOException ex) {
-            ex.printStackTrace(stderr);
-            return;
-        }
+        setProperties();
         String targetUrl = properties.getProperty("target_url");
         //String targetHost;
         String domain = properties.getProperty("domain");
@@ -164,15 +215,14 @@ public class NegotiateExtension implements IBurpExtender {
         stdout.println("[+] starting proxy");
 
         //
+        // check unlimited JCE
+        //
+        checkUnlimitedJCE();
+
+        //
         // get initial config
         //
-        properties = new Properties();
-        try {
-            properties.load(NegotiateExtension.class.getResourceAsStream("/resources/test-creds.properties"));
-        } catch (IOException ex) {
-            ex.printStackTrace(stderr);
-            return;
-        }
+        setProperties();
         String scopeUrl = properties.getProperty("scope_url");
         //String targetHost;
         String domain = properties.getProperty("domain");
@@ -211,5 +261,18 @@ public class NegotiateExtension implements IBurpExtender {
         callbacks.registerHttpListener(negotiate);
 
         stdout.println("[+] proxy started");
+    }
+
+    //
+    // ITab implementation
+    //
+    @Override
+    public String getTabCaption() {
+        return "Negotiate";
+    }
+
+    @Override
+    public Component getUiComponent() {
+        return optionsTab;
     }
 }

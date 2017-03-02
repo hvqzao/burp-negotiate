@@ -112,6 +112,7 @@ public class Negotiate implements IHttpListener {
         stdout = BurpExtender.getStdout();
         stderr = BurpExtender.getStderr();
         lineSeparator = System.lineSeparator(); // System.getProperty("line.separator");
+        enabled = true;
     }
 
     /**
@@ -381,6 +382,10 @@ public class Negotiate implements IHttpListener {
         });
         log(String.format("[+] forwardable: %b", forwardableStatus));
 
+        // clear cache and domain spn mapping
+        clearMapping();
+        clearCache();
+        
         return true;
     }
 
@@ -402,6 +407,10 @@ public class Negotiate implements IHttpListener {
                 loginContext = null;
             }
         }
+        
+        // clear cache and domain spn mapping
+        clearMapping();
+        clearCache();
     }
 
     /**
@@ -607,6 +616,14 @@ public class Negotiate implements IHttpListener {
     }
 
     /**
+     * Clear domain-SPN mapping.
+     * 
+     */
+    public void clearMapping() {
+        domainSpn.clear();
+    }
+    
+    /**
      * Clear Service Ticket cache.
      *
      */
@@ -714,6 +731,9 @@ public class Negotiate implements IHttpListener {
         }
     }
 
+    //
+    // IHttpListener implementation
+    //
     @Override
     public void processHttpMessage(int toolFlag, boolean messageIsRequest, IHttpRequestResponse messageInfo) {
         if (enabled && scope.size() > 0 && loginContext != null && messageIsRequest == false) {
