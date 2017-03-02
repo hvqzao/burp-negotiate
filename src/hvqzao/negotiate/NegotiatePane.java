@@ -82,20 +82,38 @@ public class NegotiatePane extends javax.swing.JPanel {
         });
     }
 
+    /**
+     * Display error message.
+     * 
+     * @param text 
+     */
     private void setError(String text) {
         errorLabel.setText(new StringBuilder("<html><p style='color:#e58900;font-style:italic'>").append(text).append("</p></html>").toString());
     }
 
+    /**
+     * Hide error message.
+     * 
+     */
     private void clearError() {
         setError("");
     }
 
+    /**
+     * Set login / logout / clearCache buttons enabled state depending on {@code isLoggedIn} state.
+     * 
+     * @param isLoggedIn 
+     */
     private void setLoggedInState(boolean isLoggedIn) {
         loginButton.setEnabled(isLoggedIn == false);
         logoutButton.setEnabled(isLoggedIn);
         clearCacheButton.setEnabled(isLoggedIn);
     }
 
+    /**
+     * Restore UI to defaults.
+     * 
+     */
     private void setDefaults() {
         if (negotiate != null) {
             callbacks.removeHttpListener(negotiate);
@@ -118,6 +136,12 @@ public class NegotiatePane extends javax.swing.JPanel {
         userDomainField.requestFocus();
     }
 
+    /**
+     * Add scope item.
+     * 
+     * @param textUrl
+     * @param verbose 
+     */
     private void add(String textUrl, boolean verbose) {
         URL url = getURL(textUrl);
         if (url != null) {
@@ -134,6 +158,10 @@ public class NegotiatePane extends javax.swing.JPanel {
         }
     }
 
+    /**
+     * Add scope item from {@code urlField}.
+     * 
+     */
     private void add() {
         String textUrl = urlField.getText();
         add(textUrl, true);
@@ -141,6 +169,10 @@ public class NegotiatePane extends javax.swing.JPanel {
         savePresets();
     }
 
+    /**
+     * Remove selected scope items.
+     * 
+     */
     private void remove() {
         scopeList.getSelectedValuesList().forEach((String urlText) -> {
             URL url = getURL(urlText);
@@ -155,6 +187,10 @@ public class NegotiatePane extends javax.swing.JPanel {
         savePresets();
     }
 
+    /**
+     * Clear scope.
+     * 
+     */
     private void clear() {
         if (negotiate != null) {
             negotiate.clear();
@@ -165,7 +201,7 @@ public class NegotiatePane extends javax.swing.JPanel {
     }
 
     /**
-     * Save presets to Burp config.
+     * Save current presets to Burp config. Password is not saved.
      *
      */
     private void savePresets() {
@@ -174,7 +210,7 @@ public class NegotiatePane extends javax.swing.JPanel {
     }
 
     /**
-     * Load presets from Burp config.
+     * Load current presets from Burp config.
      *
      */
     private void loadSavedPresets() {
@@ -190,12 +226,21 @@ public class NegotiatePane extends javax.swing.JPanel {
         }
     }
 
+    /**
+     * Get list of scope urls (Strings).
+     * 
+     * @return 
+     */
     private List<String> getScope() {
         return Arrays.asList(scopeModel.toArray()).stream().map((Object urlObject) -> {
             return (String) urlObject;
         }).collect(Collectors.toList());
     }
 
+    /**
+     * Login button on click activity.
+     * 
+     */
     private void login() {
         String username;
         String domain;
@@ -228,17 +273,31 @@ public class NegotiatePane extends javax.swing.JPanel {
         }
     }
 
+    /**
+     * Logout button on click activity.
+     * 
+     */
     private void logout() {
         negotiate.clear();
         negotiate.logout();
         setLoggedInState(false);
     }
 
+    /**
+     * Clear cache button on click activity.
+     * 
+     */
     private void clearCache() {
         negotiate.clearMapping();
         negotiate.clearCache();
     }
 
+    /**
+     * Convert String to URL. Returns NULL when failed.
+     * 
+     * @param textUrl
+     * @return 
+     */
     private URL getURL(String textUrl) {
         URL url = null;
         try {
