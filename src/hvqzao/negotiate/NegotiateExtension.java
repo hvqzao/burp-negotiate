@@ -258,7 +258,7 @@ public class NegotiateExtension implements IBurpExtender, ITab {
         //
         // register http listener
         //
-        callbacks.registerHttpListener(negotiate);
+        negotiate.register();
 
         stdout.println("[+] proxy started");
     }

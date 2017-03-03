@@ -68,6 +68,7 @@ import org.ietf.jgss.Oid;
 
 public class Negotiate implements IHttpListener {
 
+    private final int TCP_CONNECT_TIMEOUT = 4000;
     private String domain;
     private String kdc;
     private String username;
@@ -85,6 +86,7 @@ public class Negotiate implements IHttpListener {
     private final String lineSeparator;
     private final ArrayList<URL> scope;
     private boolean enabled;
+    private boolean registered;
 
     /**
      * Instantiate Negotiate object and initialize it with parameters.
@@ -97,11 +99,11 @@ public class Negotiate implements IHttpListener {
      * @param debug - Java Kerberos-related debug to console
      */
     public Negotiate(String domain, String username, String password, boolean forwardable, boolean verbose, boolean debug) {
-        this.scope = new ArrayList<>();
-        this.domainSpn = new HashMap<>();
-        this.spnServiceTicket = new HashMap<>();
-        this.manager = GSSManager.getInstance();
-        this.lock = new Object();
+        scope = new ArrayList<>();
+        domainSpn = new HashMap<>();
+        spnServiceTicket = new HashMap<>();
+        manager = GSSManager.getInstance();
+        lock = new Object();
         this.domain = domain;
         kdc = null;
         this.username = username;
@@ -113,6 +115,7 @@ public class Negotiate implements IHttpListener {
         stderr = BurpExtender.getStderr();
         lineSeparator = System.lineSeparator(); // System.getProperty("line.separator");
         enabled = true;
+        registered = false;
     }
 
     /**
@@ -143,15 +146,15 @@ public class Negotiate implements IHttpListener {
      *
      * "Due to export control restrictions, JDK 5.0 environments do not ship
      * with support for AES-256 enabled. Kerberos uses AES-256 in the
-     * 'aes256-cts-hmac-sha1-96' encryption type. To enable AES-256, you
-     * must download "unlimited strength" policy JAR files for your JRE.
-     * Policy JAR files are signed by the JRE vendor so you must download
-     * policy JAR files for Sun, IBM, etc. separately. Also, policy files
-     * may be different for each platform, such as i386, Solaris, or HP."
-     * 
+     * 'aes256-cts-hmac-sha1-96' encryption type. To enable AES-256, you must
+     * download "unlimited strength" policy JAR files for your JRE. Policy JAR
+     * files are signed by the JRE vendor so you must download policy JAR files
+     * for Sun, IBM, etc. separately. Also, policy files may be different for
+     * each platform, such as i386, Solaris, or HP."
+     *
      * Source:
      * https://cwiki.apache.org/confluence/display/DIRxSRVx10/Kerberos+and+Unlimited+Strength+Policy
-     * 
+     *
      * @return status
      */
     public static boolean isUnlimitedJCE() {
@@ -223,7 +226,7 @@ public class Negotiate implements IHttpListener {
         ArrayList<String> kdcs = DNS.query(DNS.TYPE_SRV, new StringBuilder("_kerberos._tcp.dc._msdcs.").append(domain.toLowerCase()).toString());
         log(String.format("[+] kdc found (%d)", kdcs.size()));
         //kdcs.forEach((String k) -> {
-        //    log("    " + k);
+        //    log(String.format("    %s", k));
         //});
 
         //
@@ -232,7 +235,7 @@ public class Negotiate implements IHttpListener {
         for (int i = 0; i < kdcs.size(); i++) {
             String k = kdcs.get(i);
             try (Socket client = new Socket()) {
-                client.connect(new InetSocketAddress(k, 88), 2000);
+                client.connect(new InetSocketAddress(k, 88), TCP_CONNECT_TIMEOUT);
                 kdc = k;
                 break;
             } catch (Exception ex) {
@@ -250,7 +253,7 @@ public class Negotiate implements IHttpListener {
         //
         // mangle config
         //
-        this.domain = domain.toUpperCase();
+        domain = domain.toUpperCase();
         String realm = Arrays.asList(domain.split("\\.", 2)).get(0).toUpperCase();
         kdc = kdc.toLowerCase();
         username = username.toUpperCase();
@@ -328,7 +331,7 @@ public class Negotiate implements IHttpListener {
         // set kerberos configuration
         //
         System.setProperty("sun.security.krb5.debug", String.valueOf(debug));
-        System.setProperty("java.security.krb5.realm", domain.toUpperCase());
+        System.setProperty("java.security.krb5.realm", domain);
         System.setProperty("java.security.krb5.kdc", kdc);
         System.setProperty("javax.security.auth.useSubjectCredsOnly", "true");
         //
@@ -385,7 +388,7 @@ public class Negotiate implements IHttpListener {
         // clear cache and domain spn mapping
         clearMapping();
         clearCache();
-        
+
         return true;
     }
 
@@ -407,7 +410,7 @@ public class Negotiate implements IHttpListener {
                 loginContext = null;
             }
         }
-        
+
         // clear cache and domain spn mapping
         clearMapping();
         clearCache();
@@ -617,12 +620,12 @@ public class Negotiate implements IHttpListener {
 
     /**
      * Clear domain-SPN mapping.
-     * 
+     *
      */
     public void clearMapping() {
         domainSpn.clear();
     }
-    
+
     /**
      * Clear Service Ticket cache.
      *
@@ -731,6 +734,39 @@ public class Negotiate implements IHttpListener {
         }
     }
 
+    /**
+     * Register auto-Negotiate HttpListener.
+     *
+     */
+    public void register() {
+        if (registered == false) {
+            IBurpExtenderCallbacks callbacks = BurpExtender.getCallbacks();
+            callbacks.registerHttpListener(this);
+            registered = true;
+        }
+    }
+
+    /**
+     * Unregister auto-Negotiate HttpListener.
+     *
+     */
+    public void unregister() {
+        if (registered) {
+            IBurpExtenderCallbacks callbacks = BurpExtender.getCallbacks();
+            callbacks.removeHttpListener(this);
+            registered = false;
+        }
+    }
+
+    /**
+     * Is auto-Negotiate already registered as HttpListener?
+     * 
+     * @return 
+     */
+    public boolean isRegistered() {
+        return registered;
+    }
+    
     //
     // IHttpListener implementation
     //

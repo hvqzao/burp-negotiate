@@ -257,7 +257,7 @@ public class NegotiatePane extends javax.swing.JPanel {
         negotiate = new Negotiate(domain, username, password);
         if (negotiate.login()) {
             setLoggedInState(true);
-            callbacks.registerHttpListener(negotiate);
+            negotiate.register();
             clearError();
 
             // add scope from list view to negotiate
