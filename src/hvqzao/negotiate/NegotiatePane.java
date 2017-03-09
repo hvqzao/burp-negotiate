@@ -12,7 +12,10 @@ import javax.swing.DefaultListModel;
 public class NegotiatePane extends javax.swing.JPanel {
 
     private static final String PRESET_USERDOMAIN = "userDomain";
+    private static final String PRESET_MODE = "mode";
     private static final String PRESET_SCOPE = "scope";
+    private static final String MODE_PROACTIVE = "Proactive";
+    private static final String MODE_REACTIVE = "Reactive";
     private Negotiate negotiate;
     private IBurpExtenderCallbacks callbacks;
     private DefaultListModel scopeModel;
@@ -62,6 +65,9 @@ public class NegotiatePane extends javax.swing.JPanel {
         defaultsButton.addActionListener((e) -> {
             setDefaults();
         });
+        modeComboBox.addActionListener((e) -> {
+            setProactive();
+        });
         addButton.addActionListener((e) -> {
             add();
         });
@@ -84,8 +90,8 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Display error message.
-     * 
-     * @param text 
+     *
+     * @param text
      */
     private void setError(String text) {
         errorLabel.setText(new StringBuilder("<html><p style='color:#e58900;font-style:italic'>").append(text).append("</p></html>").toString());
@@ -93,16 +99,17 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Hide error message.
-     * 
+     *
      */
     private void clearError() {
         setError("");
     }
 
     /**
-     * Set login / logout / clearCache buttons enabled state depending on {@code isLoggedIn} state.
-     * 
-     * @param isLoggedIn 
+     * Set login / logout / clearCache buttons enabled state depending on
+     * {@code isLoggedIn} state.
+     *
+     * @param isLoggedIn
      */
     private void setLoggedInState(boolean isLoggedIn) {
         loginButton.setEnabled(isLoggedIn == false);
@@ -112,7 +119,7 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Restore UI to defaults.
-     * 
+     *
      */
     private void setDefaults() {
         if (negotiate != null) {
@@ -123,6 +130,7 @@ public class NegotiatePane extends javax.swing.JPanel {
         urlField.setText("");
         scopeList.removeAll();
         setLoggedInState(false);
+        modeComboBox.setSelectedItem(MODE_REACTIVE);
 
         loadSavedPresets();
 
@@ -132,15 +140,36 @@ public class NegotiatePane extends javax.swing.JPanel {
         } else {
             clearError();
         }
-        
+
         userDomainField.requestFocus();
     }
 
     /**
+     * is Proactive mode set?
+     *
+     * @return status
+     */
+    private boolean isProactive() {
+        return MODE_PROACTIVE.equals(modeComboBox.getSelectedItem());
+    }
+
+    /**
+     * Notify mode change handler about mode of operation change.
+     *
+     */
+    private void setProactive() {
+        if (negotiate != null) {
+            negotiate.setProactive(isProactive());
+        }
+
+        savePresets();
+    }
+
+    /**
      * Add scope item.
-     * 
+     *
      * @param textUrl
-     * @param verbose 
+     * @param verbose
      */
     private void add(String textUrl, boolean verbose) {
         URL url = getURL(textUrl);
@@ -160,7 +189,7 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Add scope item from {@code urlField}.
-     * 
+     *
      */
     private void add() {
         String textUrl = urlField.getText();
@@ -171,7 +200,7 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Remove selected scope items.
-     * 
+     *
      */
     private void remove() {
         scopeList.getSelectedValuesList().forEach((String urlText) -> {
@@ -189,7 +218,7 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Clear scope.
-     * 
+     *
      */
     private void clear() {
         if (negotiate != null) {
@@ -206,6 +235,7 @@ public class NegotiatePane extends javax.swing.JPanel {
      */
     private void savePresets() {
         callbacks.saveExtensionSetting(PRESET_USERDOMAIN, userDomainField.getText());
+        callbacks.saveExtensionSetting(PRESET_MODE, (String) modeComboBox.getSelectedItem());
         callbacks.saveExtensionSetting(PRESET_SCOPE, String.join("|", getScope()));
     }
 
@@ -218,6 +248,10 @@ public class NegotiatePane extends javax.swing.JPanel {
         if (userDomainPreset != null) {
             userDomainField.setText(userDomainPreset);
         }
+        String modePreset = callbacks.loadExtensionSetting(PRESET_MODE);
+        if (modePreset != null && Arrays.asList(MODE_PROACTIVE, MODE_REACTIVE).contains(modePreset)) {
+            modeComboBox.setSelectedItem(modePreset);
+        }
         String scopeStringPreset = callbacks.loadExtensionSetting(PRESET_SCOPE);
         if (scopeStringPreset != null) {
             Arrays.asList(scopeStringPreset.split("\\|")).stream().forEach((String textUrl) -> {
@@ -228,8 +262,8 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Get list of scope urls (Strings).
-     * 
-     * @return 
+     *
+     * @return
      */
     private List<String> getScope() {
         return Arrays.asList(scopeModel.toArray()).stream().map((Object urlObject) -> {
@@ -239,7 +273,7 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Login button on click activity.
-     * 
+     *
      */
     private void login() {
         String username;
@@ -254,7 +288,7 @@ public class NegotiatePane extends javax.swing.JPanel {
         username = userDomain.get(0);
         domain = userDomain.get(1);
         password = new String(passwordField.getPassword());
-        negotiate = new Negotiate(domain, username, password);
+        negotiate = new Negotiate(domain, username, password, isProactive());
         if (negotiate.login()) {
             setLoggedInState(true);
             negotiate.register();
@@ -275,7 +309,7 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Logout button on click activity.
-     * 
+     *
      */
     private void logout() {
         negotiate.clear();
@@ -285,7 +319,7 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Clear cache button on click activity.
-     * 
+     *
      */
     private void clearCache() {
         negotiate.clearMapping();
@@ -294,9 +328,9 @@ public class NegotiatePane extends javax.swing.JPanel {
 
     /**
      * Convert String to URL. Returns NULL when failed.
-     * 
+     *
      * @param textUrl
-     * @return 
+     * @return
      */
     private URL getURL(String textUrl) {
         URL url = null;
@@ -342,6 +376,9 @@ public class NegotiatePane extends javax.swing.JPanel {
         jScrollPane1 = new javax.swing.JScrollPane();
         scopeList = new javax.swing.JList<>();
         clearButton = new javax.swing.JButton();
+        jPanel6 = new javax.swing.JPanel();
+        jLabel5 = new javax.swing.JLabel();
+        modeComboBox = new javax.swing.JComboBox<>();
 
         setBorder(javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
@@ -368,7 +405,7 @@ public class NegotiatePane extends javax.swing.JPanel {
             jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel3Layout.createSequentialGroup()
                 .addComponent(jLabel3)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 12, Short.MAX_VALUE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 13, Short.MAX_VALUE)
                 .addComponent(userDomainField, javax.swing.GroupLayout.PREFERRED_SIZE, 188, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addContainerGap())
         );
@@ -391,10 +428,10 @@ public class NegotiatePane extends javax.swing.JPanel {
             .addGroup(jPanel4Layout.createSequentialGroup()
                 .addComponent(jLabel4)
                 .addGap(65, 65, 65)
-                .addComponent(passwordField, javax.swing.GroupLayout.PREFERRED_SIZE, 186, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(passwordField, javax.swing.GroupLayout.PREFERRED_SIZE, 187, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(18, 18, 18)
                 .addComponent(errorLabel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                .addGap(0, 0, Short.MAX_VALUE))
         );
         jPanel4Layout.setVerticalGroup(
             jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -452,6 +489,26 @@ public class NegotiatePane extends javax.swing.JPanel {
 
         clearButton.setText("Clear");
 
+        jLabel5.setText("Mode:");
+
+        modeComboBox.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Reactive", "Proactive" }));
+
+        javax.swing.GroupLayout jPanel6Layout = new javax.swing.GroupLayout(jPanel6);
+        jPanel6.setLayout(jPanel6Layout);
+        jPanel6Layout.setHorizontalGroup(
+            jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel6Layout.createSequentialGroup()
+                .addComponent(jLabel5)
+                .addGap(86, 86, 86)
+                .addComponent(modeComboBox, 0, 189, Short.MAX_VALUE))
+        );
+        jPanel6Layout.setVerticalGroup(
+            jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                .addComponent(jLabel5)
+                .addComponent(modeComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+        );
+
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
         jPanel1.setLayout(jPanel1Layout);
         jPanel1Layout.setHorizontalGroup(
@@ -482,9 +539,10 @@ public class NegotiatePane extends javax.swing.JPanel {
                                     .addGroup(jPanel1Layout.createSequentialGroup()
                                         .addComponent(jLabel2)
                                         .addGap(0, 0, Short.MAX_VALUE))))
+                            .addComponent(jPanel4, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                             .addGroup(jPanel1Layout.createSequentialGroup()
                                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                    .addComponent(jPanel4, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addComponent(jPanel6, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                                     .addComponent(jPanel3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                                 .addGap(0, 0, Short.MAX_VALUE)))))
                 .addContainerGap())
@@ -505,7 +563,9 @@ public class NegotiatePane extends javax.swing.JPanel {
                 .addComponent(jPanel3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addComponent(jPanel4, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(jPanel6, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addComponent(jLabel2)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -521,10 +581,9 @@ public class NegotiatePane extends javax.swing.JPanel {
                         .addComponent(logoutButton)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(clearCacheButton)
-                        .addGap(0, 0, Short.MAX_VALUE))
-                    .addGroup(jPanel1Layout.createSequentialGroup()
-                        .addComponent(scopeSplitPane)
-                        .addContainerGap())))
+                        .addGap(1, 1, 1))
+                    .addComponent(scopeSplitPane))
+                .addGap(6, 6, 6))
         );
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
@@ -541,7 +600,7 @@ public class NegotiatePane extends javax.swing.JPanel {
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
                 .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(19, Short.MAX_VALUE))
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
     }// </editor-fold>//GEN-END:initComponents
 
@@ -557,14 +616,17 @@ public class NegotiatePane extends javax.swing.JPanel {
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;
     private javax.swing.JLabel jLabel4;
+    private javax.swing.JLabel jLabel5;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JPanel jPanel2;
     private javax.swing.JPanel jPanel3;
     private javax.swing.JPanel jPanel4;
     private javax.swing.JPanel jPanel5;
+    private javax.swing.JPanel jPanel6;
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JButton loginButton;
     private javax.swing.JButton logoutButton;
+    private javax.swing.JComboBox<String> modeComboBox;
     private javax.swing.JLabel optionsTitle;
     private javax.swing.JPasswordField passwordField;
     private javax.swing.JButton removeButton;

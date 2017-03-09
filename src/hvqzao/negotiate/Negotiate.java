@@ -3,10 +3,12 @@
 //
 // The following class source code is AGPLv3 licensed.
 //
-// Authors:
+// Author:
 //
 //   - Marcin Woloszyn, @hvqzao
 //     https://github.com/hvqzao/burp-negotiate
+//
+// Acknowledgement:
 //
 //   - Richard Turnbull, Richard [dot] Turnbull [at] nccgroup [dot] trust
 //     https://github.com/nccgroup/Berserko/
@@ -87,6 +89,7 @@ public class Negotiate implements IHttpListener {
     private final ArrayList<URL> scope;
     private boolean enabled;
     private boolean registered;
+    private boolean proactive;
 
     /**
      * Instantiate Negotiate object and initialize it with parameters.
@@ -94,11 +97,12 @@ public class Negotiate implements IHttpListener {
      * @param domain - case insensitive, domain FQDN
      * @param username - case insensitive
      * @param password
+     * @param proactive - proactive / reactive mode
      * @param forwardable - forwardable flag
      * @param verbose - verbose output to Burp extension stdout
      * @param debug - Java Kerberos-related debug to console
      */
-    public Negotiate(String domain, String username, String password, boolean forwardable, boolean verbose, boolean debug) {
+    public Negotiate(String domain, String username, String password, boolean proactive, boolean forwardable, boolean verbose, boolean debug) {
         scope = new ArrayList<>();
         domainSpn = new HashMap<>();
         spnServiceTicket = new HashMap<>();
@@ -108,6 +112,7 @@ public class Negotiate implements IHttpListener {
         kdc = null;
         this.username = username;
         this.password = password;
+        this.proactive = proactive;
         this.forwardable = forwardable;
         this.verbose = verbose;
         this.debug = debug;
@@ -124,10 +129,23 @@ public class Negotiate implements IHttpListener {
      * @param domain - case insensitive, domain FQDN
      * @param username - case insensitive
      * @param password
+     * @param proactive - proactive / reactive mode
      * @param forwardable - forwardable flag
      */
-    public Negotiate(String domain, String username, String password, boolean forwardable) {
-        this(domain, username, password, forwardable, false, false);
+    public Negotiate(String domain, String username, String password, boolean proactive, boolean forwardable) {
+        this(domain, username, password, proactive, forwardable, false, false);
+    }
+
+    /**
+     * Instantiate Negotiate object and initialize it with parameters.
+     *
+     * @param domain - case insensitive, domain FQDN
+     * @param username - case insensitive
+     * @param password
+     * @param proactive - proactive / reactive mode
+     */
+    public Negotiate(String domain, String username, String password, boolean proactive) {
+        this(domain, username, password, proactive, true, false, false);
     }
 
     /**
@@ -138,7 +156,7 @@ public class Negotiate implements IHttpListener {
      * @param password
      */
     public Negotiate(String domain, String username, String password) {
-        this(domain, username, password, true, false, false);
+        this(domain, username, password, false, true, false, false);
     }
 
     /**
@@ -710,6 +728,14 @@ public class Negotiate implements IHttpListener {
         this.enabled = enabled;
     }
 
+    public boolean isProactive() {
+        return proactive;
+    }
+
+    public void setProactive(boolean proactive) {
+        this.proactive = proactive;
+    }
+
     /**
      * Get an exception from error token response.
      *
@@ -760,13 +786,13 @@ public class Negotiate implements IHttpListener {
 
     /**
      * Is auto-Negotiate already registered as HttpListener?
-     * 
-     * @return 
+     *
+     * @return
      */
     public boolean isRegistered() {
         return registered;
     }
-    
+
     //
     // IHttpListener implementation
     //
@@ -791,9 +817,19 @@ public class Negotiate implements IHttpListener {
                     return url.getPath().startsWith(scopeURL.getPath());
                 })) {
                     IBurpExtenderCallbacks callbacks = BurpExtender.getCallbacks();
-                    IResponseInfo responseInfo = helpers.analyzeResponse(messageInfo.getResponse());
                     List<String> headers = requestInfo.getHeaders();
-                    if (isUnauthenticated(responseInfo)) {
+                    boolean authenticate = false;
+                    if (isProactive() == false) {
+                        // reactive mode: add negotiate header to request only if unauthenticated
+                        IResponseInfo responseInfo = helpers.analyzeResponse(messageInfo.getResponse());
+                        if (isUnauthenticated(responseInfo)) {
+                            authenticate = true;
+                        }
+                    } else {
+                        // proactive mode: add negotiate header to every request
+                        authenticate = true;
+                    }
+                    if (authenticate) {
                         // attempt to use cached token first, otherwise try to get new one
                         for (boolean cached : Arrays.asList(true, false)) {
                             log(String.format("[+] getting authentication token, cached: %b", cached));
