@@ -381,7 +381,6 @@ public class Negotiate implements IHttpListener {
                 loginContext = new LoginContext("KrbLogin", new KerberosCallBackHandler(principal, password));
                 loginContext.login();
             } catch (LoginException ex) {
-                error("log in");
                 ex.printStackTrace(stderr);
                 return false;
             }
@@ -800,6 +799,7 @@ public class Negotiate implements IHttpListener {
     public void processHttpMessage(int toolFlag, boolean messageIsRequest, IHttpRequestResponse messageInfo) {
         if (enabled && scope.size() > 0 && loginContext != null && messageIsRequest == false) {
             try {
+                final String NEGOTIATE_HEADER = "Authorization: Negotiate ";
                 IExtensionHelpers helpers = BurpExtender.getHelpers();
                 IRequestInfo requestInfo = helpers.analyzeRequest(messageInfo);
                 final URL url = requestInfo.getUrl();
@@ -820,24 +820,33 @@ public class Negotiate implements IHttpListener {
                     List<String> headers = requestInfo.getHeaders();
                     boolean authenticate = false;
                     if (isProactive() == false) {
-                        // reactive mode: add negotiate header to request only if unauthenticated
                         IResponseInfo responseInfo = helpers.analyzeResponse(messageInfo.getResponse());
                         if (isUnauthenticated(responseInfo)) {
+                            // reactive mode: add negotiate header to request only if unauthenticated
                             authenticate = true;
                         }
                     } else {
-                        // proactive mode: add negotiate header to every request
-                        authenticate = true;
+                        // avoid recursion - already attempting to authenticate?
+                        if (headers.stream().anyMatch((String header) -> {
+                            return header.startsWith(NEGOTIATE_HEADER);
+                        }) == false) {
+                            // proactive mode: add negotiate header to every request
+                            authenticate = true;
+                        }
                     }
                     if (authenticate) {
                         // attempt to use cached token first, otherwise try to get new one
                         for (boolean cached : Arrays.asList(true, false)) {
                             log(String.format("[+] getting authentication token, cached: %b", cached));
                             String token = getToken(url, cached);
-                            headers.add(new StringBuilder("Authorization: Negotiate ").append(token).toString());
+                            headers.add(new StringBuilder(NEGOTIATE_HEADER).append(token).toString());
                             byte[] authRequest = helpers.buildHttpMessage(headers, new byte[0]);
                             IHttpRequestResponse authMessageInfo = callbacks.makeHttpRequest(messageInfo.getHttpService(), authRequest);
                             byte[] authResponse = authMessageInfo.getResponse();
+                            if (authResponse == null) {
+                                stdout.println("Request failed.");
+                                break;
+                            }
                             IResponseInfo authResponseInfo = helpers.analyzeResponse(authResponse);
                             messageInfo.setResponse(authResponse);
                             if (isUnauthenticated(authResponseInfo) == false) {

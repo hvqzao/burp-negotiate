@@ -15,7 +15,7 @@ public class NegotiatePane extends javax.swing.JPanel {
     private static final String PRESET_MODE = "mode";
     private static final String PRESET_SCOPE = "scope";
     private static final String MODE_PROACTIVE = "Proactive";
-    private static final String MODE_REACTIVE = "Reactive";
+    private static final String MODE_REACTIVE = "Reactive (Recommended)";
     private Negotiate negotiate;
     private IBurpExtenderCallbacks callbacks;
     private DefaultListModel scopeModel;
@@ -49,6 +49,10 @@ public class NegotiatePane extends javax.swing.JPanel {
         callbacks.customizeUiComponent(loginButton);
         callbacks.customizeUiComponent(logoutButton);
         callbacks.customizeUiComponent(clearCacheButton);
+
+        // mode combo box
+        modeComboBox.setModel(new javax.swing.DefaultComboBoxModel<>(new String[]{MODE_REACTIVE, MODE_PROACTIVE}));
+        modeComboBox.setSelectedItem(MODE_REACTIVE);
 
         // scope list model
         scopeModel = new DefaultListModel();
