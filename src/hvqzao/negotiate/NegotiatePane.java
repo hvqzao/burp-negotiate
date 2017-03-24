@@ -128,7 +128,8 @@ public class NegotiatePane extends javax.swing.JPanel {
         userDomainField.setText("");
         passwordField.setText("");
         urlField.setText("");
-        scopeList.removeAll();
+        scopeModel.removeAllElements();
+        //scopeList.removeAll();
         setLoggedInState(false);
         modeComboBox.setSelectedItem(MODE_REACTIVE);
 
