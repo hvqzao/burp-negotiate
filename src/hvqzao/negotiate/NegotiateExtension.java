@@ -166,7 +166,7 @@ public class NegotiateExtension implements IBurpExtender, ITab {
         //
         // login, get ticket and test Negotiate authentication
         //
-        Negotiate negotiate = new Negotiate(domain, username, password, false, true, true, true);
+        Negotiate negotiate = new Negotiate(domain, username, password, false, true, true, true, true);
         if (negotiate.login()) {
             stdout.println("[+] login successful");
         } else {
@@ -243,7 +243,7 @@ public class NegotiateExtension implements IBurpExtender, ITab {
             return;
         }
 
-        Negotiate negotiate = new Negotiate(domain, username, password, false, true, true, true);
+        Negotiate negotiate = new Negotiate(domain, username, password, false, true, true, true, true);
         if (negotiate.login() == false) {
             stdout.println("login failed!");
             return;

@@ -90,6 +90,7 @@ public class Negotiate implements IHttpListener {
     private boolean enabled;
     private boolean registered;
     private boolean proactive;
+    private boolean cacheEnabled;
 
     /**
      * Instantiate Negotiate object and initialize it with parameters.
@@ -98,11 +99,12 @@ public class Negotiate implements IHttpListener {
      * @param username - case insensitive
      * @param password
      * @param proactive - proactive / reactive mode
+     * @param cacheEnabled - tickets cache
      * @param forwardable - forwardable flag
      * @param verbose - verbose output to Burp extension stdout
      * @param debug - Java Kerberos-related debug to console
      */
-    public Negotiate(String domain, String username, String password, boolean proactive, boolean forwardable, boolean verbose, boolean debug) {
+    public Negotiate(String domain, String username, String password, boolean proactive, boolean cacheEnabled, boolean forwardable, boolean verbose, boolean debug) {
         scope = new ArrayList<>();
         domainSpn = new HashMap<>();
         spnServiceTicket = new HashMap<>();
@@ -113,6 +115,7 @@ public class Negotiate implements IHttpListener {
         this.username = username;
         this.password = password;
         this.proactive = proactive;
+        this.cacheEnabled = cacheEnabled;
         this.forwardable = forwardable;
         this.verbose = verbose;
         this.debug = debug;
@@ -130,10 +133,11 @@ public class Negotiate implements IHttpListener {
      * @param username - case insensitive
      * @param password
      * @param proactive - proactive / reactive mode
+     * @param cacheEnabled - tickets cache
      * @param forwardable - forwardable flag
      */
-    public Negotiate(String domain, String username, String password, boolean proactive, boolean forwardable) {
-        this(domain, username, password, proactive, forwardable, false, false);
+    public Negotiate(String domain, String username, String password, boolean proactive, boolean cacheEnabled, boolean forwardable) {
+        this(domain, username, password, proactive, cacheEnabled, forwardable, false, false);
     }
 
     /**
@@ -143,9 +147,10 @@ public class Negotiate implements IHttpListener {
      * @param username - case insensitive
      * @param password
      * @param proactive - proactive / reactive mode
+     * @param cacheEnabled - tickets cache
      */
-    public Negotiate(String domain, String username, String password, boolean proactive) {
-        this(domain, username, password, proactive, true, false, false);
+    public Negotiate(String domain, String username, String password, boolean proactive, boolean cacheEnabled) {
+        this(domain, username, password, proactive, cacheEnabled, true, false, false);
     }
 
     /**
@@ -156,7 +161,7 @@ public class Negotiate implements IHttpListener {
      * @param password
      */
     public Negotiate(String domain, String username, String password) {
-        this(domain, username, password, false, true, false, false);
+        this(domain, username, password, false, true, true, false, false);
     }
 
     /**
@@ -288,6 +293,7 @@ public class Negotiate implements IHttpListener {
         log(String.format("    password:     %s", "*********"));
         log(String.format("    principal:    %s", principal));
         log(String.format("    forwardable:  %b", forwardable));
+        log(String.format("    cache:        %s", cacheEnabled ? "enabled" : "disabled"));
 
         //
         // build krb5 config
@@ -805,7 +811,7 @@ public class Negotiate implements IHttpListener {
                 IRequestInfo requestInfo = helpers.analyzeRequest(messageInfo);
                 final URL url = requestInfo.getUrl();
                 // is current url in Negotiate scope?
-                if (scope.stream().anyMatch((URL scopeURL) -> {
+                boolean isInScope = scope.stream().anyMatch((URL scopeURL) -> {
                     if (url.getProtocol().equals(scopeURL.getProtocol()) == false) {
                         return false;
                     }
@@ -816,7 +822,10 @@ public class Negotiate implements IHttpListener {
                         return false;
                     }
                     return url.getPath().startsWith(scopeURL.getPath());
-                })) {
+                });
+                if (isInScope == false) {
+                    log("[+] Ignoring (out of scope) URL:", url.toString());
+                } else {
                     IBurpExtenderCallbacks callbacks = BurpExtender.getCallbacks();
                     List<String> headers = requestInfo.getHeaders();
                     boolean authenticate = false;
@@ -834,8 +843,15 @@ public class Negotiate implements IHttpListener {
                     if (authenticate && headers.stream().anyMatch((String header) -> {
                         return header.toLowerCase().startsWith(NEGOTIATE_HEADER_LOWERCASE);
                     }) == false) {
-                        // attempt to use cached token first, otherwise try to get new one
-                        for (boolean cached : Arrays.asList(true, false)) {
+                        List<Boolean> cacheAttempts;
+                        if (cacheEnabled == false) {
+                            cacheAttempts = Arrays.asList(false);
+                        } else {
+                            // attempt to use cached token first, otherwise try to get new one
+                            cacheAttempts = Arrays.asList(true, false);
+                        }
+                        log("cache enabled: ", String.valueOf(cacheEnabled));
+                        for (boolean cached : cacheAttempts) {
                             log();
                             if (debug) {
                                 System.out.println();
@@ -848,13 +864,16 @@ public class Negotiate implements IHttpListener {
                                 IHttpRequestResponse authMessageInfo = callbacks.makeHttpRequest(messageInfo.getHttpService(), authRequest);
                                 byte[] authResponse = authMessageInfo.getResponse();
                                 if (authResponse == null) {
-                                    stdout.println("Request failed.");
+                                    log("[ ] request failed.");
                                     break;
                                 }
                                 IResponseInfo authResponseInfo = helpers.analyzeResponse(authResponse);
                                 messageInfo.setResponse(authResponse);
                                 if (isUnauthenticated(authResponseInfo) == false) {
+                                    log(String.format("[ ] got 401, cached: %b", cached));
                                     break;
+                                } else {
+                                    log(String.format("[+] got %d, cached: %b", authResponseInfo.getStatusCode(), cached));
                                 }
                                 // check if we received an error token response
                                 Optional<String> optionalHeader = authResponseInfo.getHeaders().stream().map((String header) -> {

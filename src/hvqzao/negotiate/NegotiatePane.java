@@ -15,6 +15,9 @@ public class NegotiatePane extends javax.swing.JPanel {
     private static final String PRESET_USERDOMAIN = "userDomain";
     private static final String PRESET_MODE = "mode";
     private static final String PRESET_SCOPE = "scope";
+    private static final String PRESET_VERBOSE = "verbose";
+    private static final String PRESET_KERBEROS_DEBUG = "kerberosDebug";
+    private static final String PRESET_TICKET_CACHE = "ticketCache";
     private static final String MODE_PROACTIVE = "Proactive";
     private static final String MODE_REACTIVE = "Reactive (Recommended)";
     private Negotiate negotiate;
@@ -122,6 +125,7 @@ public class NegotiatePane extends javax.swing.JPanel {
         clearCacheButton.setEnabled(isLoggedIn);
         verboseCheckBox.setEnabled(isLoggedIn == false);
         kerberosDebugCheckBox.setEnabled(isLoggedIn == false);
+        ticketCacheCheckBox.setEnabled(isLoggedIn == false);
     }
 
     /**
@@ -245,6 +249,9 @@ public class NegotiatePane extends javax.swing.JPanel {
         callbacks.saveExtensionSetting(PRESET_USERDOMAIN, userDomainField.getText());
         callbacks.saveExtensionSetting(PRESET_MODE, (String) modeComboBox.getSelectedItem());
         callbacks.saveExtensionSetting(PRESET_SCOPE, String.join("|", getScope()));
+        callbacks.saveExtensionSetting(PRESET_VERBOSE, String.valueOf(verboseCheckBox.isSelected()));
+        callbacks.saveExtensionSetting(PRESET_KERBEROS_DEBUG, String.valueOf(kerberosDebugCheckBox.isSelected()));
+        callbacks.saveExtensionSetting(PRESET_TICKET_CACHE, String.valueOf(ticketCacheCheckBox.isSelected()));
     }
 
     /**
@@ -266,6 +273,21 @@ public class NegotiatePane extends javax.swing.JPanel {
                 add(textUrl, false);
             });
         }
+        String verbosePreset = callbacks.loadExtensionSetting(PRESET_VERBOSE);
+        if (verbosePreset != null) {
+            boolean verbose = "true".equals(verbosePreset);
+            verboseCheckBox.setSelected(verbose);
+        }
+        String kerberosDebugPreset = callbacks.loadExtensionSetting(PRESET_KERBEROS_DEBUG);
+        if (kerberosDebugPreset != null) {
+            boolean kerberosDebug = "true".equals(kerberosDebugPreset);
+            kerberosDebugCheckBox.setSelected(kerberosDebug);
+        }
+        String ticketCachePreset = callbacks.loadExtensionSetting(PRESET_TICKET_CACHE);
+        if (ticketCachePreset != null) {
+            boolean ticketCache = "true".equals(ticketCachePreset);
+            ticketCacheCheckBox.setSelected(ticketCache);
+        }
     }
 
     /**
@@ -284,35 +306,35 @@ public class NegotiatePane extends javax.swing.JPanel {
      *
      */
     private void login() {
-        String username;
-        String domain;
-        String password;
         String userDomainText = userDomainField.getText();
         List<String> userDomain = Arrays.asList(userDomainText.split("@", 2));
         if (userDomain.size() < 2) {
             setError("Invalid format of Username @ Domain field!");
             return;
         }
-        username = userDomain.get(0);
-        domain = userDomain.get(1);
-        password = new String(passwordField.getPassword());
-        negotiate = new Negotiate(domain, username, password, isProactive(), true, verboseCheckBox.isSelected(), kerberosDebugCheckBox.isSelected());
-        if (negotiate.login()) {
-            setLoggedInState(true);
-            negotiate.register();
-            clearError();
+        setError("Logging in... Please wait...");
+        SwingUtilities.invokeLater(() -> {
+            String username = userDomain.get(0);
+            String domain = userDomain.get(1);
+            String password = new String(passwordField.getPassword());
+            negotiate = new Negotiate(domain, username, password, isProactive(), ticketCacheCheckBox.isSelected(), true, verboseCheckBox.isSelected(), kerberosDebugCheckBox.isSelected());
+            if (negotiate.login()) {
+                setLoggedInState(true);
+                negotiate.register();
+                clearError();
 
-            // add scope from list view to negotiate
-            getScope().forEach((String urlText) -> {
-                URL url = getURL(urlText);
-                negotiate.add(url);
-            });
+                // add scope from list view to negotiate
+                getScope().forEach((String urlText) -> {
+                    URL url = getURL(urlText);
+                    negotiate.add(url);
+                });
 
-            savePresets();
-        } else {
-            setError("Login failed!");
-            negotiate = null;
-        }
+                savePresets();
+            } else {
+                setError("Login failed!");
+                negotiate = null;
+            }
+        });
     }
 
     /**
@@ -390,6 +412,7 @@ public class NegotiatePane extends javax.swing.JPanel {
         verboseCheckBox = new javax.swing.JCheckBox();
         kerberosDebugCheckBox = new javax.swing.JCheckBox();
         jLabel6 = new javax.swing.JLabel();
+        ticketCacheCheckBox = new javax.swing.JCheckBox();
 
         setBorder(javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
@@ -526,6 +549,9 @@ public class NegotiatePane extends javax.swing.JPanel {
 
         jLabel6.setText("Options:");
 
+        ticketCacheCheckBox.setSelected(true);
+        ticketCacheCheckBox.setText("Ticket cache enabled");
+
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
         jPanel1.setLayout(jPanel1Layout);
         jPanel1Layout.setHorizontalGroup(
@@ -563,7 +589,8 @@ public class NegotiatePane extends javax.swing.JPanel {
                                     .addComponent(jPanel6, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                                     .addComponent(jPanel3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                                     .addComponent(verboseCheckBox)
-                                    .addComponent(jLabel6))
+                                    .addComponent(jLabel6)
+                                    .addComponent(ticketCacheCheckBox))
                                 .addGap(0, 0, Short.MAX_VALUE)))))
                 .addContainerGap())
         );
@@ -608,6 +635,8 @@ public class NegotiatePane extends javax.swing.JPanel {
                 .addComponent(verboseCheckBox)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addComponent(kerberosDebugCheckBox)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(ticketCacheCheckBox)
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
@@ -659,6 +688,7 @@ public class NegotiatePane extends javax.swing.JPanel {
     private javax.swing.JButton removeButton;
     private javax.swing.JList<String> scopeList;
     private javax.swing.JSplitPane scopeSplitPane;
+    private javax.swing.JCheckBox ticketCacheCheckBox;
     private javax.swing.JTextField urlField;
     private javax.swing.JTextField userDomainField;
     private javax.swing.JCheckBox verboseCheckBox;
