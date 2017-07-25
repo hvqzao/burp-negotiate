@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import javax.swing.DefaultListModel;
+import javax.swing.SwingUtilities;
 
 public class NegotiatePane extends javax.swing.JPanel {
 
@@ -119,6 +120,8 @@ public class NegotiatePane extends javax.swing.JPanel {
         loginButton.setEnabled(isLoggedIn == false);
         logoutButton.setEnabled(isLoggedIn);
         clearCacheButton.setEnabled(isLoggedIn);
+        verboseCheckBox.setEnabled(isLoggedIn == false);
+        kerberosDebugCheckBox.setEnabled(isLoggedIn == false);
     }
 
     /**
@@ -293,7 +296,7 @@ public class NegotiatePane extends javax.swing.JPanel {
         username = userDomain.get(0);
         domain = userDomain.get(1);
         password = new String(passwordField.getPassword());
-        negotiate = new Negotiate(domain, username, password, isProactive());
+        negotiate = new Negotiate(domain, username, password, isProactive(), true, verboseCheckBox.isSelected(), kerberosDebugCheckBox.isSelected());
         if (negotiate.login()) {
             setLoggedInState(true);
             negotiate.register();
@@ -384,6 +387,9 @@ public class NegotiatePane extends javax.swing.JPanel {
         jPanel6 = new javax.swing.JPanel();
         jLabel5 = new javax.swing.JLabel();
         modeComboBox = new javax.swing.JComboBox<>();
+        verboseCheckBox = new javax.swing.JCheckBox();
+        kerberosDebugCheckBox = new javax.swing.JCheckBox();
+        jLabel6 = new javax.swing.JLabel();
 
         setBorder(javax.swing.BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
@@ -446,7 +452,7 @@ public class NegotiatePane extends javax.swing.JPanel {
                 .addComponent(errorLabel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
         );
 
-        jLabel2.setText("Scope:");
+        jLabel2.setText("Scope URL:");
 
         addButton.setText("Add");
 
@@ -468,7 +474,7 @@ public class NegotiatePane extends javax.swing.JPanel {
         );
         jPanel2Layout.setVerticalGroup(
             jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 167, Short.MAX_VALUE)
+            .addGap(0, 177, Short.MAX_VALUE)
         );
 
         scopeSplitPane.setRightComponent(jPanel2);
@@ -487,7 +493,7 @@ public class NegotiatePane extends javax.swing.JPanel {
             .addGroup(jPanel5Layout.createSequentialGroup()
                 .addComponent(urlField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 141, Short.MAX_VALUE))
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 151, Short.MAX_VALUE))
         );
 
         scopeSplitPane.setLeftComponent(jPanel5);
@@ -513,6 +519,12 @@ public class NegotiatePane extends javax.swing.JPanel {
                 .addComponent(jLabel5)
                 .addComponent(modeComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
         );
+
+        verboseCheckBox.setText("Verbose (logs to extension output)");
+
+        kerberosDebugCheckBox.setText("Kerberos debug (logs to Java console)");
+
+        jLabel6.setText("Options:");
 
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
         jPanel1.setLayout(jPanel1Layout);
@@ -547,8 +559,11 @@ public class NegotiatePane extends javax.swing.JPanel {
                             .addComponent(jPanel4, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                             .addGroup(jPanel1Layout.createSequentialGroup()
                                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                    .addComponent(kerberosDebugCheckBox)
                                     .addComponent(jPanel6, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                    .addComponent(jPanel3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                    .addComponent(jPanel3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addComponent(verboseCheckBox)
+                                    .addComponent(jLabel6))
                                 .addGap(0, 0, Short.MAX_VALUE)))))
                 .addContainerGap())
         );
@@ -572,8 +587,8 @@ public class NegotiatePane extends javax.swing.JPanel {
                 .addComponent(jPanel6, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addComponent(jLabel2)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                     .addGroup(jPanel1Layout.createSequentialGroup()
                         .addComponent(addButton)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
@@ -585,10 +600,15 @@ public class NegotiatePane extends javax.swing.JPanel {
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(logoutButton)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(clearCacheButton)
-                        .addGap(1, 1, 1))
+                        .addComponent(clearCacheButton))
                     .addComponent(scopeSplitPane))
-                .addGap(6, 6, 6))
+                .addGap(18, 18, 18)
+                .addComponent(jLabel6)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(verboseCheckBox)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(kerberosDebugCheckBox)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
@@ -622,6 +642,7 @@ public class NegotiatePane extends javax.swing.JPanel {
     private javax.swing.JLabel jLabel3;
     private javax.swing.JLabel jLabel4;
     private javax.swing.JLabel jLabel5;
+    private javax.swing.JLabel jLabel6;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JPanel jPanel2;
     private javax.swing.JPanel jPanel3;
@@ -629,6 +650,7 @@ public class NegotiatePane extends javax.swing.JPanel {
     private javax.swing.JPanel jPanel5;
     private javax.swing.JPanel jPanel6;
     private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JCheckBox kerberosDebugCheckBox;
     private javax.swing.JButton loginButton;
     private javax.swing.JButton logoutButton;
     private javax.swing.JComboBox<String> modeComboBox;
@@ -639,5 +661,6 @@ public class NegotiatePane extends javax.swing.JPanel {
     private javax.swing.JSplitPane scopeSplitPane;
     private javax.swing.JTextField urlField;
     private javax.swing.JTextField userDomainField;
+    private javax.swing.JCheckBox verboseCheckBox;
     // End of variables declaration//GEN-END:variables
 }

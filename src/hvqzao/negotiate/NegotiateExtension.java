@@ -59,6 +59,7 @@ public class NegotiateExtension implements IBurpExtender, ITab {
                 optionsPane.initialize();
 
                 callbacks.addSuiteTab(this);
+                //stdout.println("Started.");
             } catch (Exception ex) {
                 ex.printStackTrace(stderr);
             }

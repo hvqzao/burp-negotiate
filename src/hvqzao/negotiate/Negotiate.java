@@ -800,6 +800,7 @@ public class Negotiate implements IHttpListener {
         if (enabled && scope.size() > 0 && loginContext != null && messageIsRequest == false) {
             try {
                 final String NEGOTIATE_HEADER = "Authorization: Negotiate ";
+                final String NEGOTIATE_HEADER_LOWERCASE = NEGOTIATE_HEADER.toLowerCase();
                 IExtensionHelpers helpers = BurpExtender.getHelpers();
                 IRequestInfo requestInfo = helpers.analyzeRequest(messageInfo);
                 final URL url = requestInfo.getUrl();
@@ -820,49 +821,53 @@ public class Negotiate implements IHttpListener {
                     List<String> headers = requestInfo.getHeaders();
                     boolean authenticate = false;
                     if (isProactive() == false) {
+                        // reactive mode: add negotiate header to request only if unauthenticated
                         IResponseInfo responseInfo = helpers.analyzeResponse(messageInfo.getResponse());
                         if (isUnauthenticated(responseInfo)) {
-                            // reactive mode: add negotiate header to request only if unauthenticated
                             authenticate = true;
                         }
                     } else {
-                        // avoid recursion - already attempting to authenticate?
-                        if (headers.stream().anyMatch((String header) -> {
-                            return header.startsWith(NEGOTIATE_HEADER);
-                        }) == false) {
-                            // proactive mode: add negotiate header to every request
-                            authenticate = true;
-                        }
+                        // proactive mode: add negotiate header to every request
+                        authenticate = true;
                     }
-                    if (authenticate) {
+                    // avoid recursion - already attempting to authenticate?
+                    if (authenticate && headers.stream().anyMatch((String header) -> {
+                        return header.toLowerCase().startsWith(NEGOTIATE_HEADER_LOWERCASE);
+                    }) == false) {
                         // attempt to use cached token first, otherwise try to get new one
                         for (boolean cached : Arrays.asList(true, false)) {
+                            log();
+                            if (debug) {
+                                System.out.println();
+                            }
                             log(String.format("[+] getting authentication token, cached: %b", cached));
                             String token = getToken(url, cached);
-                            headers.add(new StringBuilder(NEGOTIATE_HEADER).append(token).toString());
-                            byte[] authRequest = helpers.buildHttpMessage(headers, new byte[0]);
-                            IHttpRequestResponse authMessageInfo = callbacks.makeHttpRequest(messageInfo.getHttpService(), authRequest);
-                            byte[] authResponse = authMessageInfo.getResponse();
-                            if (authResponse == null) {
-                                stdout.println("Request failed.");
-                                break;
-                            }
-                            IResponseInfo authResponseInfo = helpers.analyzeResponse(authResponse);
-                            messageInfo.setResponse(authResponse);
-                            if (isUnauthenticated(authResponseInfo) == false) {
-                                break;
-                            }
-                            // check if we received an error token response
-                            Optional<String> optionalHeader = authResponseInfo.getHeaders().stream().map((String header) -> {
-                                return header.trim().replaceAll("\\s+", " ");
-                            }).filter((String header) -> {
-                                return header.toLowerCase().startsWith("www-authenticate: negotiate ");
-                            }).findFirst();
-                            if (optionalHeader.isPresent()) {
-                                log("[+] got error token response!");
-                                String responseToken = Arrays.asList(optionalHeader.get().split("\\s", 3)).get(2);
-                                GSSContext context = getServiceTicket(getHost(url)).getContext();
-                                processErrorTokenResponse(context, responseToken);
+                            if (token != null) {
+                                headers.add(new StringBuilder(NEGOTIATE_HEADER).append(token).toString());
+                                byte[] authRequest = helpers.buildHttpMessage(headers, new byte[0]);
+                                IHttpRequestResponse authMessageInfo = callbacks.makeHttpRequest(messageInfo.getHttpService(), authRequest);
+                                byte[] authResponse = authMessageInfo.getResponse();
+                                if (authResponse == null) {
+                                    stdout.println("Request failed.");
+                                    break;
+                                }
+                                IResponseInfo authResponseInfo = helpers.analyzeResponse(authResponse);
+                                messageInfo.setResponse(authResponse);
+                                if (isUnauthenticated(authResponseInfo) == false) {
+                                    break;
+                                }
+                                // check if we received an error token response
+                                Optional<String> optionalHeader = authResponseInfo.getHeaders().stream().map((String header) -> {
+                                    return header.trim().replaceAll("\\s+", " ");
+                                }).filter((String header) -> {
+                                    return header.toLowerCase().startsWith("www-authenticate: negotiate ");
+                                }).findFirst();
+                                if (optionalHeader.isPresent()) {
+                                    log("[+] got error token response!");
+                                    String responseToken = Arrays.asList(optionalHeader.get().split("\\s", 3)).get(2);
+                                    GSSContext context = getServiceTicket(getHost(url)).getContext();
+                                    processErrorTokenResponse(context, responseToken);
+                                }
                             }
                         }
                     }
